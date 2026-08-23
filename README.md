@@ -1,3 +1,7 @@
+<!-- plugin-market-repos:start -->
+https://github.com/gybeyond1/MoviePilot-Plugins
+<!-- plugin-market-repos:end -->
+
 # MoviePilot-Plugins
 
 > [!NOTE]
