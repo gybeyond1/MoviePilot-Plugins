@@ -784,11 +784,12 @@
     "name": "EchoLink通知",
     "description": "将MoviePilot通知推送到EchoLink，支持富文本卡片和交互按钮，双向通信。",
     "labels": "通知",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "echolink.png",
     "author": "gybeyond",
     "level": 1,
     "history": {
+      "v1.0.1": "修复请求体解析，支持EchoLink回调；修复插件ID大小写问题",
       "v1.0.0": "初始版本，支持通知推送、富文本卡片、交互按钮、双向通信"
     },
     "release": true
