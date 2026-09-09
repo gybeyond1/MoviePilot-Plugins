@@ -780,7 +780,7 @@
       "v0.0.1": "发布测试版本，要求 MoviePilot v2.9.25+"
     }
   },
-  "Echolink": {
+  "echolink": {
     "name": "EchoLink通知",
     "description": "将MoviePilot通知推送到EchoLink，支持富文本卡片和交互按钮，双向通信。",
     "labels": "通知",
