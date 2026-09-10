@@ -15,7 +15,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.1.4"
+    plugin_version = "1.1.5"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -217,12 +217,21 @@ class echolink(_PluginBase):
                 details.append({"key": label_map.get(key, key), "value": str(event_data[key])})
 
         buttons = []
-        if "buttons" in event_data and isinstance(event_data["buttons"], list):
-            for b in event_data["buttons"]:
-                if isinstance(b, dict) and "text" in b:
+        raw_buttons = event_data.get("buttons")
+        logger.info(f"EchoLink调试: event_data keys={list(event_data.keys())}, buttons={raw_buttons}")
+        if raw_buttons and isinstance(raw_buttons, list):
+            for row in raw_buttons:
+                if isinstance(row, list):
+                    for b in row:
+                        if isinstance(b, dict) and "text" in b:
+                            buttons.append({
+                                "text": b["text"],
+                                "callback_data": b.get("callback_data", b.get("url", ""))
+                            })
+                elif isinstance(row, dict) and "text" in row:
                     buttons.append({
-                        "text": b["text"],
-                        "callback_data": b.get("callback_data", b.get("url", ""))
+                        "text": row["text"],
+                        "callback_data": row.get("callback_data", row.get("url", ""))
                     })
 
         card = {"title": title, "text": text, "details": details, "buttons": buttons}
