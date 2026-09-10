@@ -219,11 +219,10 @@ class echolink(_PluginBase):
             logger.error(f"EchoLink 推送异常: {str(e)}")
 
     def _build_card(self, event_data: dict) -> dict:
-        title = event_data.get("title", "") or (event_data.get("text", "") or "")[:50]
-        if not title:
-            title = "MoviePilot 通知"
+        title = event_data.get("title", "") or ""
+        # 注意：不要用 text 截断作为 title，否则安卓端会同时显示截断的 title 和完整的 text，导致重复
+        text = event_data.get("text", "").strip()
 
-        text = event_data.get("text", "")
         image = event_data.get("image", "")
 
         details = []
