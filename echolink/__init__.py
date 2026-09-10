@@ -14,7 +14,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -325,7 +325,7 @@ class echolink(_PluginBase):
         try:
             import requests
             session_id = f"echolink_{username}"
-            agent_url = "http://localhost:3000/api/v1/agent/stream"
+            agent_url = "http://localhost:3001/api/v1/message/agent/stream"
             headers = {
                 "X-API-Key": apikey,
                 "Content-Type": "application/json",
