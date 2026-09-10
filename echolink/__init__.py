@@ -345,7 +345,7 @@ class echolink(_PluginBase):
             chain = MessageChain()
             chain.handle_message(
                 channel=NotificationChannel.WebAgent,
-                source="echolink_callback",
+                source="echolink",
                 userid=mp_userid,
                 username=mp_username,
                 text=callback_data,
