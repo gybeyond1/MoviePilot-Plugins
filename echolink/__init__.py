@@ -15,7 +15,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.1.5"
+    plugin_version = "1.1.6"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -307,6 +307,7 @@ class echolink(_PluginBase):
 
 
     def callback(self, apikey: str, request: Any):
+        """处理 EchoLink 按钮回调，把 callback_data 作为消息发给 MessageChain 处理"""
         data = self._parse_request_body(request)
         username = data.get("username", "")
         callback_data = data.get("callback_data", "")
@@ -314,11 +315,31 @@ class echolink(_PluginBase):
 
         logger.info(f"EchoLink 按钮回调: user={username}, callback={callback_data}, msg_id={message_id}")
 
-        return {
-            "code": 0,
-            "message": "回调已接收",
-            "data": {"username": username, "callback_data": callback_data, "message_id": message_id}
-        }
+        if not callback_data:
+            return {"code": 1, "message": "callback_data 为空"}
+
+        try:
+            # 解析对应的 MP 用户身份
+            mp_userid, mp_username, mp_is_admin = self._resolve_mp_user(username)
+            # 把 callback_data 作为文本消息发给 MessageChain，Agent 会处理并回复
+            chain = MessageChain()
+            chain.handle_message(
+                channel=NotificationChannel.WebAgent,
+                source="echolink_callback",
+                userid=mp_userid,
+                username=mp_username,
+                text=callback_data,
+                is_channel_admin=mp_is_admin,
+            )
+            logger.info(f"按钮回调已提交给 MessageChain: echolink_user={username}, mp_user={mp_username}, callback={callback_data}")
+            return {
+                "code": 0,
+                "message": "回调已处理",
+                "data": {"username": username, "callback_data": callback_data, "message_id": message_id}
+            }
+        except Exception as e:
+            logger.error(f"处理按钮回调失败: {e}", exc_info=True)
+            return {"code": 1, "message": f"处理失败: {str(e)}"}
 
     def _resolve_mp_user(self, echolink_username: str) -> tuple:
         """
