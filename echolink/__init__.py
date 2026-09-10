@@ -14,7 +14,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.2"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -292,18 +292,66 @@ class echolink(_PluginBase):
         }
 
     def message(self, apikey: str, request: Any):
-        data = self._parse_request_body(request)
-        username = data.get("username", "")
-        text = data.get("text", "")
+        # 暴力解析：尝试所有可能的方式获取 request 参数
+        username = ""
+        text = ""
+        raw_data = {}
 
-        logger.info(f"EchoLink 用户消息: user={username}, text={text}")
+        try:
+            # 方式1: Flask request 对象，从 query params 取
+            if hasattr(request, 'args'):
+                req_str = request.args.get('request', '')
+                if req_str:
+                    logger.info(f"[DEBUG] from request.args: {req_str[:200]}")
+                    outer = json.loads(req_str)
+                    if isinstance(outer, dict) and 'body' in outer:
+                        raw_data = json.loads(outer['body'])
+                    elif isinstance(outer, dict):
+                        raw_data = outer
+
+            # 方式2: request 本身就是字典
+            if not raw_data and isinstance(request, dict):
+                logger.info(f"[DEBUG] request is dict: {str(request)[:200]}")
+                if 'body' in request and isinstance(request['body'], str):
+                    raw_data = json.loads(request['body'])
+                elif 'json' in request and isinstance(request['json'], dict):
+                    raw_data = request['json']
+                else:
+                    raw_data = request
+
+            # 方式3: request 是字符串
+            if not raw_data and isinstance(request, str):
+                logger.info(f"[DEBUG] request is str: {request[:200]}")
+                outer = json.loads(request)
+                if isinstance(outer, dict) and 'body' in outer:
+                    raw_data = json.loads(outer['body'])
+                elif isinstance(outer, dict):
+                    raw_data = outer
+
+            # 方式4: Flask request 的 get_json
+            if not raw_data and hasattr(request, 'get_json'):
+                try:
+                    j = request.get_json(silent=True)
+                    if j:
+                        logger.info(f"[DEBUG] from get_json: {str(j)[:200]}")
+                        if 'body' in j and isinstance(j['body'], str):
+                            raw_data = json.loads(j['body'])
+                        else:
+                            raw_data = j
+                except Exception:
+                    pass
+
+            username = raw_data.get("username", "") if isinstance(raw_data, dict) else ""
+            text = raw_data.get("text", "") if isinstance(raw_data, dict) else ""
+        except Exception as e:
+            logger.error(f"[DEBUG] parse error: {e}")
+
+        logger.info(f"EchoLink 用户消息: user={username}, text={text}, raw={str(raw_data)[:200]}")
 
         if not text:
             return {"code": 1, "message": "消息内容为空"}
 
         # TODO: 调用 MP Agent API 处理用户消息
-        # 目前先返回已接收，后续对接 Agent 对话
-
         return {
             "code": 0,
             "message": "消息已接收",
