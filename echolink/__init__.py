@@ -15,7 +15,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.0.8"
+    plugin_version = "1.0.9"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -207,10 +207,10 @@ class echolink(_PluginBase):
         image = event_data.get("image", "")
 
         details = []
-        for key in ["type", "channel", "source", "category", "year", "rating", "size", "status"]:
+        # 去掉 type/channel/source 等内部元数据，只显示用户关心的媒体信息
+        for key in ["category", "year", "rating", "size", "status"]:
             if key in event_data and event_data[key]:
                 label_map = {
-                    "type": "类型", "channel": "渠道", "source": "来源",
                     "category": "分类", "year": "年份", "rating": "评分",
                     "size": "大小", "status": "状态"
                 }
