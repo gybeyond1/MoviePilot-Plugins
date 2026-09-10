@@ -15,7 +15,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.1.1"
+    plugin_version = "1.1.2"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -311,6 +311,27 @@ class echolink(_PluginBase):
             "data": {"username": username, "callback_data": callback_data, "message_id": message_id}
         }
 
+    def _resolve_mp_user(self, echolink_username: str) -> tuple:
+        """
+        解析 EchoLink 用户对应的 MP 用户身份。
+        优先查找与 EchoLink 用户名同名的 MP 用户，找不到则回退到管理员。
+        返回 (userid, username, is_admin)
+        """
+        try:
+            from app.db.oper.user import UserOper
+            user_oper = UserOper()
+            # 先尝试查找同名用户
+            user = user_oper.get_by_name(echolink_username)
+            if user and user.is_active:
+                logger.info(f"EchoLink用户 {echolink_username} 匹配到MP用户: {user.name} (id={user.id}, admin={user.is_superuser})")
+                return user.id, user.name, bool(user.is_superuser)
+            # 找不到则回退到管理员
+            logger.info(f"EchoLink用户 {echolink_username} 在MP中无对应用户，使用管理员身份")
+            return 1, "admin", True
+        except Exception as e:
+            logger.warning(f"解析MP用户身份失败，回退管理员: {e}")
+            return 1, "admin", True
+
     def message(self, apikey: str, request: Any):
         """处理 EchoLink 用户消息，直接调用 MessageChain 处理 Agent 对话"""
         data = self._parse_request_body(request)
@@ -323,17 +344,19 @@ class echolink(_PluginBase):
             return {"code": 1, "message": "消息内容为空"}
 
         try:
+            # 解析对应的 MP 用户身份（优先同名用户，找不到回退管理员）
+            mp_userid, mp_username, mp_is_admin = self._resolve_mp_user(username)
             # 直接调用 MessageChain 处理消息，Agent 回复会通过 NoticeMessage 事件推回 EchoLink
             chain = MessageChain()
             chain.handle_message(
                 channel=NotificationChannel.Web,
                 source="echolink",
-                userid=1,
-                username="admin",
+                userid=mp_userid,
+                username=mp_username,
                 text=text,
-                is_channel_admin=True,
+                is_channel_admin=mp_is_admin,
             )
-            logger.info(f"消息已提交给 MessageChain 处理: user={username}")
+            logger.info(f"消息已提交给 MessageChain 处理: echolink_user={username}, mp_user={mp_username}")
             return {
                 "code": 0,
                 "message": "消息已处理",
