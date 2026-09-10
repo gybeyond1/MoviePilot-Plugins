@@ -14,7 +14,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -311,68 +311,95 @@ class echolink(_PluginBase):
         }
 
     def message(self, apikey: str, request: Any):
-        # 暴力解析：尝试所有可能的方式获取 request 参数
-        username = ""
-        text = ""
-        raw_data = {}
+        """处理 EchoLink 用户消息，调用 MP Agent 并把回复推回 EchoLink"""
+        data = self._parse_request_body(request)
+        username = data.get("username", "")
+        text = data.get("text", "")
 
-        try:
-            # 方式1: Flask request 对象，从 query params 取
-            if hasattr(request, 'args'):
-                req_str = request.args.get('request', '')
-                if req_str:
-                    logger.info(f"[DEBUG] from request.args: {req_str[:200]}")
-                    outer = json.loads(req_str)
-                    if isinstance(outer, dict) and 'body' in outer:
-                        raw_data = json.loads(outer['body'])
-                    elif isinstance(outer, dict):
-                        raw_data = outer
-
-            # 方式2: request 本身就是字典
-            if not raw_data and isinstance(request, dict):
-                logger.info(f"[DEBUG] request is dict: {str(request)[:200]}")
-                if 'body' in request and isinstance(request['body'], str):
-                    raw_data = json.loads(request['body'])
-                elif 'json' in request and isinstance(request['json'], dict):
-                    raw_data = request['json']
-                else:
-                    raw_data = request
-
-            # 方式3: request 是字符串
-            if not raw_data and isinstance(request, str):
-                logger.info(f"[DEBUG] request is str: {request[:200]}")
-                outer = json.loads(request)
-                if isinstance(outer, dict) and 'body' in outer:
-                    raw_data = json.loads(outer['body'])
-                elif isinstance(outer, dict):
-                    raw_data = outer
-
-            # 方式4: Flask request 的 get_json
-            if not raw_data and hasattr(request, 'get_json'):
-                try:
-                    j = request.get_json(silent=True)
-                    if j:
-                        logger.info(f"[DEBUG] from get_json: {str(j)[:200]}")
-                        if 'body' in j and isinstance(j['body'], str):
-                            raw_data = json.loads(j['body'])
-                        else:
-                            raw_data = j
-                except Exception:
-                    pass
-
-            username = raw_data.get("username", "") if isinstance(raw_data, dict) else ""
-            text = raw_data.get("text", "") if isinstance(raw_data, dict) else ""
-        except Exception as e:
-            logger.error(f"[DEBUG] parse error: {e}")
-
-        logger.info(f"EchoLink 用户消息: user={username}, text={text}, raw={str(raw_data)[:200]}")
+        logger.info(f"EchoLink 用户消息: user={username}, text={text}")
 
         if not text:
             return {"code": 1, "message": "消息内容为空"}
 
-        # TODO: 调用 MP Agent API 处理用户消息
-        return {
-            "code": 0,
-            "message": "消息已接收",
-            "data": {"username": username, "text": text}
-        }
+        # 调用 MP Agent API
+        try:
+            import requests
+            session_id = f"echolink_{username}"
+            agent_url = f"{self.mp_base_url}/api/v1/agent/stream"
+            headers = {
+                "X-API-Key": apikey,
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream"
+            }
+            payload = {
+                "text": text,
+                "session_id": session_id
+            }
+
+            logger.info(f"调用 Agent API: {agent_url}, session={session_id}")
+
+            resp = requests.post(
+                agent_url,
+                json=payload,
+                headers=headers,
+                stream=True,
+                timeout=60
+            )
+
+            # 解析 SSE 响应，收集文本回复和按钮
+            reply_text = ""
+            choices = []
+            for line in resp.iter_lines(decode_unicode=True):
+                if line and line.startswith("data: "):
+                    try:
+                        event_data = json.loads(line[6:])
+                        event_type = event_data.get("type", "")
+                        if event_type == "message":
+                            msg = event_data.get("message", "")
+                            if msg:
+                                reply_text += msg
+                        elif event_type == "choice":
+                            choice = event_data.get("choice", {})
+                            if choice:
+                                choices.append(choice)
+                    except Exception as e:
+                        logger.warning(f"解析SSE事件失败: {e}, line={line[:100]}")
+
+            logger.info(f"Agent回复: text={reply_text[:200]}, choices={len(choices)}")
+
+            # 把回复通过 webhook 推回 EchoLink
+            if reply_text:
+                webhook_url = self._get_config("webhook_url", "")
+                if webhook_url:
+                    try:
+                        webhook_payload = {
+                            "username": username,
+                            "text": reply_text,
+                            "sender": "MoviePilot",
+                            "type": "text"
+                        }
+                        if choices:
+                            webhook_payload["choices"] = choices
+                        requests.post(
+                            webhook_url,
+                            json=webhook_payload,
+                            timeout=10
+                        )
+                        logger.info(f"回复已推送到EchoLink: {webhook_url}")
+                    except Exception as e:
+                        logger.error(f"推送回复到EchoLink失败: {e}")
+
+            return {
+                "code": 0,
+                "message": "消息已处理",
+                "data": {
+                    "username": username,
+                    "text": text,
+                    "reply": reply_text[:500] if reply_text else ""
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"调用Agent失败: {e}", exc_info=True)
+            return {"code": 1, "message": f"Agent处理失败: {str(e)}"}
+
