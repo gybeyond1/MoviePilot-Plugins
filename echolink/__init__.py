@@ -4,7 +4,8 @@ from typing import Any, List, Dict, Tuple, Optional
 from app.core.event import eventmanager, Event
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas.types import EventType
+from app.schemas.types import EventType, NotificationChannel
+from app.chain.message import MessageChain
 from app.utils.http import RequestUtils
 
 
@@ -14,7 +15,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.0.6"
+    plugin_version = "1.0.8"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -311,7 +312,7 @@ class echolink(_PluginBase):
         }
 
     def message(self, apikey: str, request: Any):
-        """处理 EchoLink 用户消息，调用 MP Agent 并把回复推回 EchoLink"""
+        """处理 EchoLink 用户消息，直接调用 MessageChain 处理 Agent 对话"""
         data = self._parse_request_body(request)
         username = data.get("username", "")
         text = data.get("text", "")
@@ -321,88 +322,23 @@ class echolink(_PluginBase):
         if not text:
             return {"code": 1, "message": "消息内容为空"}
 
-        # 调用 MP Agent API（本地地址）
         try:
-            import requests
-            session_id = f"echolink_{username}"
-            agent_url = "http://localhost:3001/api/v1/message/agent/stream"
-            headers = {
-                "X-API-Key": apikey,
-                "Content-Type": "application/json",
-                "Accept": "text/event-stream"
-            }
-            payload = {
-                "text": text,
-                "session_id": session_id
-            }
-
-            logger.info(f"调用 Agent API: {agent_url}, session={session_id}")
-
-            resp = requests.post(
-                agent_url,
-                json=payload,
-                headers=headers,
-                stream=True,
-                timeout=60
+            # 直接调用 MessageChain 处理消息，Agent 回复会通过 NoticeMessage 事件推回 EchoLink
+            chain = MessageChain()
+            chain.handle_message(
+                channel=NotificationChannel.Web,
+                source="echolink",
+                userid=username,
+                username=username,
+                text=text,
             )
-
-            # 解析 SSE 响应，收集文本回复和按钮
-            reply_text = ""
-            choices = []
-            for line in resp.iter_lines(decode_unicode=True):
-                if line and line.startswith("data: "):
-                    try:
-                        event_data = json.loads(line[6:])
-                        event_type = event_data.get("type", "")
-                        if event_type == "message":
-                            msg = event_data.get("message", "")
-                            if msg:
-                                reply_text += msg
-                        elif event_type == "choice":
-                            choice = event_data.get("choice", {})
-                            if choice:
-                                choices.append(choice)
-                    except Exception as e:
-                        logger.warning(f"解析SSE事件失败: {e}, line={line[:100]}")
-
-            logger.info(f"Agent回复: text={reply_text[:200]}, choices={len(choices)}")
-
-            # 把回复通过 webhook 推回 EchoLink
-            if reply_text and self._echolink_url and self._echolink_username:
-                webhook_url = f"{self._echolink_url}/api/webhook/moviepilot/{self._echolink_username}"
-                try:
-                    webhook_payload = {
-                        "username": username,
-                        "text": reply_text,
-                        "sender": "MoviePilot",
-                        "type": "text"
-                    }
-                    if choices:
-                        webhook_payload["choices"] = choices
-                    webhook_headers = {}
-                    if self._echolink_token:
-                        webhook_headers["Authorization"] = f"Bearer {self._echolink_token}"
-                    requests.post(
-                        webhook_url,
-                        json=webhook_payload,
-                        headers=webhook_headers,
-                        timeout=10
-                    )
-                    logger.info(f"回复已推送到EchoLink: {webhook_url}")
-                except Exception as e:
-                    logger.error(f"推送回复到EchoLink失败: {e}")
-
+            logger.info(f"消息已提交给 MessageChain 处理: user={username}")
             return {
                 "code": 0,
                 "message": "消息已处理",
-                "data": {
-                    "username": username,
-                    "text": text,
-                    "reply": reply_text[:500] if reply_text else ""
-                }
+                "data": {"username": username, "text": text}
             }
-
         except Exception as e:
-            logger.error(f"调用Agent失败: {e}", exc_info=True)
-            return {"code": 1, "message": f"Agent处理失败: {str(e)}"}
+            logger.error(f"处理消息失败: {e}", exc_info=True)
+            return {"code": 1, "message": f"处理失败: {str(e)}"}
 
