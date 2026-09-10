@@ -15,7 +15,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.1.3"
+    plugin_version = "1.1.4"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -359,7 +359,7 @@ class echolink(_PluginBase):
             # 直接调用 MessageChain 处理消息，Agent 回复会通过 NoticeMessage 事件推回 EchoLink
             chain = MessageChain()
             chain.handle_message(
-                channel=NotificationChannel.Web,
+                channel=NotificationChannel.WebAgent,
                 source="echolink",
                 userid=mp_userid,
                 username=mp_username,
