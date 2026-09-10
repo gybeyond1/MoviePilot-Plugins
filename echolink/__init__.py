@@ -14,7 +14,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -232,50 +232,69 @@ class echolink(_PluginBase):
     # ===== API 回调 =====
 
     def _parse_request_body(self, request: Any) -> dict:
-        """从 MP 插件 API 的 request 对象解析请求体"""
+        """从 MP 插件 API 的 request 对象解析请求体（兼容 Flask 和 FastAPI）"""
         if request is None:
             return {}
 
-        # 第一步：把 request 转成字典
-        data = {}
-        # Flask request 对象
-        if hasattr(request, 'get_json'):
-            try:
-                data = request.get_json(silent=True) or {}
-            except Exception:
-                data = {}
-            # 如果 get_json 为空，尝试从 args 取 request 参数
-            if not data and hasattr(request, 'args'):
+        raw_data = {}
+
+        try:
+            # FastAPI Request 对象：从 query_params 取 request 参数
+            if hasattr(request, 'query_params'):
+                req_str = request.query_params.get('request', '')
+                if req_str:
+                    logger.info(f"[DEBUG] FastAPI query_params: {req_str[:200]}")
+                    outer = json.loads(req_str)
+                    if isinstance(outer, dict) and 'body' in outer and isinstance(outer['body'], str):
+                        raw_data = json.loads(outer['body'])
+                    elif isinstance(outer, dict):
+                        raw_data = outer
+
+            # Flask request 对象：从 args 取 request 参数
+            if not raw_data and hasattr(request, 'args'):
+                req_str = request.args.get('request', '')
+                if req_str:
+                    logger.info(f"[DEBUG] Flask args: {req_str[:200]}")
+                    outer = json.loads(req_str)
+                    if isinstance(outer, dict) and 'body' in outer and isinstance(outer['body'], str):
+                        raw_data = json.loads(outer['body'])
+                    elif isinstance(outer, dict):
+                        raw_data = outer
+
+            # request 本身就是字典
+            if not raw_data and isinstance(request, dict):
+                logger.info(f"[DEBUG] request is dict: {str(request)[:200]}")
+                if 'body' in request and isinstance(request['body'], str):
+                    raw_data = json.loads(request['body'])
+                elif 'json' in request and isinstance(request['json'], dict):
+                    raw_data = request['json']
+                else:
+                    raw_data = request
+
+            # request 是字符串
+            if not raw_data and isinstance(request, str):
+                logger.info(f"[DEBUG] request is str: {request[:200]}")
+                outer = json.loads(request)
+                if isinstance(outer, dict) and 'body' in outer and isinstance(outer['body'], str):
+                    raw_data = json.loads(outer['body'])
+                elif isinstance(outer, dict):
+                    raw_data = outer
+
+            # Flask get_json
+            if not raw_data and hasattr(request, 'get_json'):
                 try:
-                    req_str = request.args.get('request', '')
-                    if req_str:
-                        data = json.loads(req_str)
+                    j = request.get_json(silent=True)
+                    if j:
+                        logger.info(f"[DEBUG] Flask get_json: {str(j)[:200]}")
+                        raw_data = j
                 except Exception:
                     pass
-        # 字典对象
-        elif isinstance(request, dict):
-            data = request
-        # 字符串
-        elif isinstance(request, str):
-            try:
-                data = json.loads(request)
-            except Exception:
-                data = {}
 
-        # 第二步：如果 data 里有 body 字段且是字符串，再解析一次（EchoLink 发送的嵌套格式）
-        if isinstance(data, dict) and 'body' in data and isinstance(data['body'], str):
-            try:
-                inner = json.loads(data['body'])
-                if isinstance(inner, dict):
-                    return inner
-            except Exception:
-                pass
+        except Exception as e:
+            logger.error(f"[DEBUG] parse error: {e}")
 
-        # 如果 data 里有 json 字段，用 json 字段
-        if isinstance(data, dict) and 'json' in data and isinstance(data['json'], dict):
-            return data['json']
+        return raw_data if isinstance(raw_data, dict) else {}
 
-        return data if isinstance(data, dict) else {}
 
     def callback(self, apikey: str, request: Any):
         data = self._parse_request_body(request)
