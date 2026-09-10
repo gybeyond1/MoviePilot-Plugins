@@ -15,7 +15,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.1.2"
+    plugin_version = "1.1.3"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -314,7 +314,7 @@ class echolink(_PluginBase):
     def _resolve_mp_user(self, echolink_username: str) -> tuple:
         """
         解析 EchoLink 用户对应的 MP 用户身份。
-        优先查找与 EchoLink 用户名同名的 MP 用户，找不到则回退到管理员。
+        优先查找与 EchoLink 用户名同名的 MP 用户，找不到则查找第一个超级管理员。
         返回 (userid, username, is_admin)
         """
         try:
@@ -325,11 +325,21 @@ class echolink(_PluginBase):
             if user and user.is_active:
                 logger.info(f"EchoLink用户 {echolink_username} 匹配到MP用户: {user.name} (id={user.id}, admin={user.is_superuser})")
                 return user.id, user.name, bool(user.is_superuser)
-            # 找不到则回退到管理员
-            logger.info(f"EchoLink用户 {echolink_username} 在MP中无对应用户，使用管理员身份")
+            # 找不到则查找第一个超级管理员用户（不硬编码用户名）
+            all_users = user_oper.list()
+            for u in all_users:
+                if u.is_active and u.is_superuser:
+                    logger.info(f"EchoLink用户 {echolink_username} 无同名MP用户，使用管理员: {u.name} (id={u.id})")
+                    return u.id, u.name, True
+            # 连管理员都找不到，用第一个活跃用户
+            for u in all_users:
+                if u.is_active:
+                    logger.info(f"EchoLink用户 {echolink_username} 无管理员，使用第一个活跃用户: {u.name} (id={u.id})")
+                    return u.id, u.name, bool(u.is_superuser)
+            logger.warning(f"MP中无任何活跃用户，回退默认身份")
             return 1, "admin", True
         except Exception as e:
-            logger.warning(f"解析MP用户身份失败，回退管理员: {e}")
+            logger.warning(f"解析MP用户身份失败，回退默认: {e}")
             return 1, "admin", True
 
     def message(self, apikey: str, request: Any):
