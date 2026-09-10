@@ -15,7 +15,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.1.6"
+    plugin_version = "1.1.7"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -171,6 +171,27 @@ class echolink(_PluginBase):
 
         event_data = event.event_data or {}
         if not event_data:
+            return
+
+        # DEBUG: 打印 event_data 所有字段，用于排查渠道过滤
+        logger.info(f"EchoLink on_notice 调试: event_data keys={list(event_data.keys())}")
+        for k, v in event_data.items():
+            if k not in ('text', 'image', 'buttons'):
+                logger.info(f"  {k} = {v}")
+
+        # 渠道过滤：只处理来自 EchoLink 渠道的消息或全局通知
+        # Telegram/微信等其他渠道的 Agent 回复不应推送到 EchoLink
+        channel = event_data.get("channel", "")
+        source = event_data.get("source", "")
+        msg_type = event_data.get("type", "")
+        logger.info(f"EchoLink 渠道过滤: channel={channel}, source={source}, type={msg_type}")
+
+        # 如果明确标记了其他渠道，跳过
+        if channel and str(channel).lower() not in ("", "echolink", "webagent", "web"):
+            logger.info(f"EchoLink 跳过非EchoLink渠道消息: channel={channel}")
+            return
+        if source and str(source).lower() in ("telegram", "wechat", "wecom", "serverchan", "pushplus"):
+            logger.info(f"EchoLink 跳过其他渠道消息: source={source}")
             return
 
         try:
