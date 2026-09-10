@@ -14,7 +14,7 @@ class echolink(_PluginBase):
     # 插件描述
     plugin_desc = "通过 EchoLink 接收 MoviePilot 通知并远程控制，支持富文本卡片和交互按钮"
     # 插件版本
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.5"
     # 插件作者
     plugin_author = "gybeyond"
     # 作者主页
@@ -321,11 +321,11 @@ class echolink(_PluginBase):
         if not text:
             return {"code": 1, "message": "消息内容为空"}
 
-        # 调用 MP Agent API
+        # 调用 MP Agent API（本地地址）
         try:
             import requests
             session_id = f"echolink_{username}"
-            agent_url = f"{self.mp_base_url}/api/v1/agent/stream"
+            agent_url = "http://localhost:3000/api/v1/agent/stream"
             headers = {
                 "X-API-Key": apikey,
                 "Content-Type": "application/json",
@@ -368,26 +368,29 @@ class echolink(_PluginBase):
             logger.info(f"Agent回复: text={reply_text[:200]}, choices={len(choices)}")
 
             # 把回复通过 webhook 推回 EchoLink
-            if reply_text:
-                webhook_url = self._get_config("webhook_url", "")
-                if webhook_url:
-                    try:
-                        webhook_payload = {
-                            "username": username,
-                            "text": reply_text,
-                            "sender": "MoviePilot",
-                            "type": "text"
-                        }
-                        if choices:
-                            webhook_payload["choices"] = choices
-                        requests.post(
-                            webhook_url,
-                            json=webhook_payload,
-                            timeout=10
-                        )
-                        logger.info(f"回复已推送到EchoLink: {webhook_url}")
-                    except Exception as e:
-                        logger.error(f"推送回复到EchoLink失败: {e}")
+            if reply_text and self._echolink_url and self._echolink_username:
+                webhook_url = f"{self._echolink_url}/api/webhook/moviepilot/{self._echolink_username}"
+                try:
+                    webhook_payload = {
+                        "username": username,
+                        "text": reply_text,
+                        "sender": "MoviePilot",
+                        "type": "text"
+                    }
+                    if choices:
+                        webhook_payload["choices"] = choices
+                    webhook_headers = {}
+                    if self._echolink_token:
+                        webhook_headers["Authorization"] = f"Bearer {self._echolink_token}"
+                    requests.post(
+                        webhook_url,
+                        json=webhook_payload,
+                        headers=webhook_headers,
+                        timeout=10
+                    )
+                    logger.info(f"回复已推送到EchoLink: {webhook_url}")
+                except Exception as e:
+                    logger.error(f"推送回复到EchoLink失败: {e}")
 
             return {
                 "code": 0,
