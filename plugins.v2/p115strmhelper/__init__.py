@@ -1,3 +1,26 @@
+# --- MoviePilot 本地维护补丁：p115client 依赖 concurrenttools 改名兼容 ---
+# concurrenttools >= 0.1.8 把 threadpool_map / taskgroup_map 改名为
+# thread_conmap(同步) / async_conmap(异步)，而 p115client 仍按旧名 import，
+# 直接 ImportError 会让整个插件 load_failed（STRM 全部 404）。
+# 这里在任何 p115client 导入之前，给 concurrenttools 补上旧名别名。
+def _mp_patch_concurrenttools_alias() -> None:
+    """为 concurrenttools>=0.1.8 回填 p115client 依赖的旧函数名别名。"""
+
+    try:
+        import concurrenttools as _ct
+    except Exception:  # pragma: no cover - 依赖缺失时保持原有报错行为
+        return
+    for _old, _new in (
+        ("threadpool_map", "thread_conmap"),
+        ("taskgroup_map", "async_conmap"),
+    ):
+        if not hasattr(_ct, _old) and hasattr(_ct, _new):
+            setattr(_ct, _old, getattr(_ct, _new))
+
+
+_mp_patch_concurrenttools_alias()
+# --- 补丁结束 ---
+
 from time import sleep
 from copy import deepcopy
 from dataclasses import asdict
@@ -1793,7 +1816,6 @@ class P115StrmHelper(_PluginBase):
                 enabled=configer.sync_del_enabled,
                 notify=configer.sync_del_notify,
                 del_source=configer.sync_del_source,
-                delete_symlink=configer.sync_del_delete_symlink,
                 p115_library_path=configer.sync_del_p115_library_path,
                 p115_force_delete_files=configer.sync_del_p115_force_delete_files,
             )

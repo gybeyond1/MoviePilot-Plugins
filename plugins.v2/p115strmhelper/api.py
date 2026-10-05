@@ -591,12 +591,21 @@ class Api:
                 "time": _time,
                 "sign": sign,
             }
-            resp = P115Client.login_qrcode_scan_status(payload)
+            resp = P115Client.login_qrcode_scan_status(
+                payload, timeout=10, retries=0
+            )
             if not isinstance(resp, dict):
                 return ApiResponse(code=-1, msg="检查二维码状态异常: 返回数据类型异常")
             check_response(resp)
             status_code = (resp.get("data") or {}).get("status")
         except Exception as e:
+            err_text = str(e).lower()
+            # 长轮询等待扫码期间超时属正常现象，按"等待扫码"处理
+            if "timed out" in err_text or "max retries" in err_text or "timeout" in err_text:
+                logger.warn(f"【扫码登入】检查二维码状态超时(长轮询等待扫码): {e}")
+                return ApiResponse(
+                    data=CheckQRCodeData(status="waiting", msg="等待扫码")
+                )
             error_msg = f"检查二维码状态异常: {str(e)}"
             logger.error(f"【扫码登入】检查二维码状态异常: {e}", exc_info=True)
             return ApiResponse(code=-1, msg=error_msg)
@@ -616,7 +625,9 @@ class Api:
 
         if status_code == 2:
             try:
-                resp = P115Client.login_qrcode_scan_result(uid, app=final_client_type)
+                resp = P115Client.login_qrcode_scan_result(
+                    uid, app=final_client_type, timeout=15, retries=0
+                )
                 if not isinstance(resp, dict):
                     return ApiResponse(
                         code=-1, msg="获取登录结果失败: 返回数据类型异常"
