@@ -122,7 +122,7 @@
     "name": "115网盘STRM助手",
     "description": "115网盘STRM生成一条龙服务",
     "labels": "云盘",
-    "version": "2.8.75",
+    "version": "2.8.76",
     "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Frontend/refs/heads/v2/src/assets/images/misc/u115.png",
     "author": "DDSRem",
     "release": true,
@@ -492,7 +492,8 @@
       "v0.0.4": "增加缓存",
       "v0.0.3": "公测",
       "v0.0.2": "测试版本，切勿使用",
-      "v0.0.1": "测试版本，切勿使用"
+      "v0.0.1": "测试版本，切勿使用",
+      "v2.8.76": "本地维护补丁版（基于官方 2.8.74）：撤回与 MoviePilot 3.1.0 不兼容的 envelope 前端改写，前端恢复官方读法（新版插件 API 不再套 envelope）；保留 115 二维码长轮询超时与 concurrenttools 改名兼容 shim，避免挂起请求堆积与插件 load_failed、STRM 302 播放 404"
     }
   },
   "P115Disk": {
